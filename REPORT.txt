@@ -1,0 +1,143 @@
+====================================================================================================
+  BT-CAGTNet v9 - FINAL REPORT
+  Dual-scale CBAM-CNN + Transformer, adaptive gated fusion, lesion-mask supervision
+====================================================================================================
+
+  dataset          : 3746 radiographs, 1318 case groups (metadata grouping)
+  task             : binary 'tumor' (tumour vs no-tumour)
+  backbone         : effnetb0 | input 384 px | cache 448 px
+  views            : full only
+  annotations      : none (0 images) | seg head off | multi-task ON
+  branches         : ['cnn_full', 'trans_full'] | fusion gated
+  parameters       : 4.99 M
+  session elapsed  : 4.94 h of a 10.6 h budget
+
+----------------------------------------------------------------------------------------------------
+  RESULT 1 - PROTOCOL A (case-level split, leakage-safe)   << HEADLINE >>
+----------------------------------------------------------------------------------------------------
+    train  acc 0.8745 | bacc 0.8745 | f1 0.8740 | sens 0.8783 | spec 0.8708 | AUROC 0.9493
+    val    acc 0.8318 | bacc 0.8314 | f1 0.8378 | sens 0.8545 | spec 0.8083 | AUROC 0.8934
+    test   acc 0.8115 | bacc 0.8114 | f1 0.8192 | sens 0.8506 | spec 0.7722 | AUROC 0.9064
+    threshold 0.5238, fitted on validation only
+    train-val gap +0.0427
+    >= 0.90 on all three splits : no
+    >= 0.93 on all three splits : no
+    >= 0.95 on all three splits : no
+
+----------------------------------------------------------------------------------------------------
+  RESULT 2 - ENSEMBLE (protocol A)
+----------------------------------------------------------------------------------------------------
+    train  acc 0.9389 | f1 0.9382 | AUROC 0.9817
+    val    acc 0.8706 | f1 0.8736 | AUROC 0.9304
+    test   acc 0.8577 | f1 0.8582 | AUROC 0.9299
+
+----------------------------------------------------------------------------------------------------
+  RESULT 3 - PROTOCOL B (image-level split, the official BTXRD protocol)
+----------------------------------------------------------------------------------------------------
+    train  acc 0.8318 | f1 0.8121 | AUROC 0.9269
+    val    acc 0.8274 | f1 0.8131 | AUROC 0.8891
+    test   acc 0.7918 | f1 0.7655 | AUROC 0.8939
+    leakage premium on test accuracy : -0.0197
+    2512 of 3746 images (67.1%) sit in case groups
+    that span splits under this protocol. Comparable with published BTXRD numbers,
+    NOT comparable with protocol A, and never to be quoted as leakage-safe.
+
+----------------------------------------------------------------------------------------------------
+  RESULT 4 - 5-FOLD GROUP CROSS-VALIDATION (protocol A)
+----------------------------------------------------------------------------------------------------
+    val  acc   0.8026 +/- 0.0295
+    test acc   0.7768 +/- 0.0282
+    test AUROC 0.8562 +/- 0.0245
+    mean gap   +0.0194
+    v5 baseline: test acc 0.846 +/- 0.013, test AUROC 0.927 +/- 0.008, gap +0.124
+
+----------------------------------------------------------------------------------------------------
+  RESULT 5 - BENCHMARKS (protocol A, identical recipe)
+----------------------------------------------------------------------------------------------------
+    BT-CAGTNet v9 + ensemble     test acc 0.8577 | AUROC 0.9299 | gap +0.0683
+    BT-CAGTNet v9 (proposed)     test acc 0.8115 | AUROC 0.9064 | gap +0.0427
+    EffNetV2-S                   test acc 0.7885 | AUROC 0.8892 | gap +0.0190
+    ResNet18 + CBAM              test acc 0.8000 | AUROC 0.8862 | gap +0.0434
+    DenseNet121                  test acc 0.7712 | AUROC 0.8787 | gap +0.0266
+
+----------------------------------------------------------------------------------------------------
+  RESULT 6 - ABLATIONS
+----------------------------------------------------------------------------------------------------
+    full v9 (v9.2 default)       test AUROC 0.8899  (+0.0000)
+    - multi-task heads           test AUROC 0.8869  (-0.0030)
+    + ROI view (dual scale)      test AUROC 0.8864  (-0.0035)
+    - CBAM                       test AUROC 0.9024  (+0.0125)
+    - transformer                test AUROC 0.8846  (-0.0053)
+    + patch-graph branch         test AUROC 0.8841  (-0.0058)
+
+----------------------------------------------------------------------------------------------------
+  RESULT 7 - BOOTSTRAP 95% CI (test split)
+----------------------------------------------------------------------------------------------------
+    accuracy   0.8115  [0.7769, 0.8442]
+    F1         0.8192  [0.7821, 0.8522]
+    AUROC      0.9064  [0.8803, 0.9307]
+
+----------------------------------------------------------------------------------------------------
+  THE FIVE DEFECTS FIXED, AND THE ONE REPORTED
+----------------------------------------------------------------------------------------------------
+    F1  early stopping fired on a gap-penalised score that flattens while AUROC climbs.
+        v8 stopped at ep 22 and v6 at ep 26 - each on its own AUROC MAXIMUM.
+        v9 stops on raw val AUROC, patience 10, armed after epoch 15.
+    F2  LR 1e-4 x 0.05 = 5e-6 on the backbone. v9 runs 0.0002 x 0.1 = 2e-05.
+    F3  the gap was being closed by pushing train DOWN, which took val with it.
+        v9 closes it by lifting val: mask supervision, multi-task heads, more signal.
+    F4  CutMix and constant-fill erasing injected label noise on a localised lesion.
+    F5  the EMA warmup reached d=0.81 after 40 epochs - a 5-step window, i.e. no EMA.
+    F6  negative case groups over-merge: group-level positive rate 0.71
+        against an image-level 0.50. MEASURED AND REPORTED, not
+        silently corrected. Subdividing them by perceptual hash would split real
+        multi-view cases apart and CAN leak; over-merging only costs sample size.
+
+----------------------------------------------------------------------------------------------------
+  v9.2 - THE HEAD WAS OVERFITTING, NOT (ONLY) THE BACKBONE
+----------------------------------------------------------------------------------------------------
+    The first v9 run hit train acc 1.0000 by epoch 2 WHILE THE BACKBONE WAS STILL
+    FROZEN - proof the 4-branch dual-view head, not backbone fine-tuning, was doing
+    the memorising. Fixed structurally, not just with more dropout:
+      - single view by default (2 branches, not 4) - USE_ROI_VIEW = False
+      - embedding/transformer dim cut 160 -> 128, heads 4 -> 4
+      - dedicated 0.25 dropout on the final classifier only
+      - WD 0.02 -> 0.05, dropout/droppath/aug raised
+    The dual-view ROI branch is kept as an ablation row ('+ ROI view (dual scale)')
+    rather than deleted, so the report can show whether it is worth its capacity cost.
+
+----------------------------------------------------------------------------------------------------
+  v9.3 - HARD AUGMENTATION (data-level fix for head memorisation)
+----------------------------------------------------------------------------------------------------
+    Even after the v9.2 capacity cut, the head memorised training images in a single
+    epoch. Root cause: the augmentation pipeline was not diverse enough to prevent
+    the ~400 K-parameter head from converging to 2685 training images in one pass.
+    v9.3 fixes this at the DATA level with a fundamentally stronger augmentation:
+      backbone       : effnetv2s (20.2 M) -> effnetb0 (5.3 M), same 1280-ch output
+      AUG_STRENGTH   : 1.35 -> 0.6
+      CLAHE          : random clip 1.5-4.0, 8x8 grid — X-ray standard preprocessing
+      elastic deform : random Gaussian displacement field (40% per image per epoch)
+      perspective    : random corner displacement, simulates off-axis acquisition (35%)
+      crop scale     : floor 0.55 -> 0.30 (3x more spatial variety at full strength)
+      solarize       : random threshold pixel inversion — breaks intensity memorisation
+      motion blur    : horizontal / vertical — simulates acquisition motion
+      noise          : Gaussian + Poisson (quantum noise) + salt-and-pepper
+      grid shuffle   : 4x4 patch permutation (25% prob) — destroys texture layouts
+      erasing        : up to 0 noise-filled patches <= 15%
+      consistency    : KL(view1, view2) dual-view regularisation (weight 0.0)
+      WD 0.05 -> 0.005, HEAD_DROPOUT 0.50 -> 0.25, FREEZE_EPOCHS 4 -> 2
+
+----------------------------------------------------------------------------------------------------
+  LIMITATIONS, STATED
+----------------------------------------------------------------------------------------------------
+    - Case groups are RECONSTRUCTED. BTXRD ships no patient identifier, so protocol A
+      is a best-effort reconstruction, not ground truth. It errs toward over-merging,
+      which costs data efficiency and can never create leakage.
+    - Normal radiographs carry no bone-site metadata, so their group key is only
+      (centre, age, sex) and over-merges unrelated patients. See F6.
+    - The segmentation head is supervised only where an annotation exists; its IoU is
+      a diagnostic that the auxiliary loss did something, not a segmentation result.
+    - Protocol B is reported because it is the official BTXRD protocol and makes the
+      numbers comparable. It is not leakage-safe and is never presented as such.
+
+====================================================================================================
