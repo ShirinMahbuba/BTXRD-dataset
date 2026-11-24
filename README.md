@@ -13,13 +13,13 @@ BT-CAGTNet combines the local texture features of a CNN with the global context 
 
 ![](https://github.com/ShirinMahbuba/BTXRD-dataset/blob/main/model%20arhiteture.png)
 
-Shared backbone: EfficientNet-B0 processes the whole radiograph (single view).
-CBAM: refines backbone feature maps with channel attention (average- and max-pooled MLP) and spatial attention (7x7 convolution).
-Transformer branch: tokenizes the CBAM feature map into 144 patch tokens plus a class token and captures long-range dependencies across the bone.
-Adaptive gated fusion: a small gating network gives a per-image soft weighting, so the model decides how much to trust local convolutional vs global attention evidence.
-Multi-task heads: auxiliary prediction of view, region, bone site, joint involvement and malignancy; each loss is masked to samples where that label exists.
-Segmentation head (optional): a two-layer 3x3 convolutional decoder on the CBAM map (Dice + BCE loss). It was inactive in the reported run, because no pixel-level lesion annotations were available (lambda_seg = 0).
-Ensemble: BT-CAGTNet averaged with a ConvNeXt-Tiny trained on the same recipe, in probability space (threshold re-fitted on validation only).
+-Shared backbone: EfficientNet-B0 processes the whole radiograph (single view).
+-CBAM: refines backbone feature maps with channel attention (average- and max-pooled MLP) and spatial attention (7x7 convolution).
+-Transformer branch: tokenizes the CBAM feature map into 144 patch tokens plus a class token and captures long-range dependencies across the bone.
+-Adaptive gated fusion: a small gating network gives a per-image soft weighting, so the model decides how much to trust local convolutional vs global attention evidence.
+-Multi-task heads: auxiliary prediction of view, region, bone site, joint involvement and malignancy; each loss is masked to samples where that label exists.
+-Segmentation head (optional): a two-layer 3x3 convolutional decoder on the CBAM map (Dice + BCE loss). It was inactive in the reported run, because no pixel-level lesion annotations were available (lambda_seg = 0).
+-Ensemble: BT-CAGTNet averaged with a ConvNeXt-Tiny trained on the same recipe, in probability space (threshold re-fitted on validation only).
 
 ## Preprocessing
 
