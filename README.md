@@ -11,7 +11,7 @@ Binary classification (**tumour vs no-tumour**) of bone radiographs with a light
 
 BT-CAGTNet combines the local texture features of a CNN with the global context of a Transformer, weighted per image by a learned gate. Total: 4.99 M parameter
 
-![Uploading model arhiteture.png…]()
+![](https://github.com/ShirinMahbuba/BTXRD-dataset/blob/main/model%20arhiteture.png)
 
 
 
